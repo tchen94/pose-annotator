@@ -126,8 +126,8 @@ def upload_and_create_frame_set():
         'video_id': video_id,
         'frame_set_id': frame_set_id,
         'fps': processor.fps,
-        'width': processor.width,
-        'height': processor.height,
+        'orig_width': processor.width,
+        'orig_height': processor.height,
         'total_frames': total_frames,
         'count': len(frame_numbers),
         'frame_numbers': frame_numbers
@@ -136,13 +136,23 @@ def upload_and_create_frame_set():
     if get_first_frame and len(frame_numbers) > 0:
         first_index = 0
         first_frame_num = frame_numbers[first_index]
+
         frame = processor.get_frame(number = first_frame_num)
+
+        # Prioritize height resizing (max 720 px)
+        if frame.shape[0] > 720:
+            frame = processor.resize(frame, height = 720)
+
+        # Resize width to max 1280 px
+        if frame.shape[1] > 1280:
+            frame = processor.resize(frame, width = 1280)
+
         resp['first_frame'] = {
             'frame_idx': first_index,
             'frame_num': first_frame_num,
             'frame_img': _frame_to_base64(frame),
-            'width': frame.shape[1],
-            'height': frame.shape[0]
+            'render_width': frame.shape[1],
+            'render_height': frame.shape[0]
         }
 
     return jsonify(resp)
@@ -157,8 +167,8 @@ def get_frame_set_info(frame_set_id: str):
             'frame_set_id': metadata.get('frame_set_id'),
             'video_id': metadata.get('video_id'),
             'fps': metadata.get('fps'),
-            'width': metadata.get('width'),
-            'height': metadata.get('height'),
+            'orig_width': metadata.get('orig_width'),
+            'orig_height': metadata.get('orig_height'),
             'total_frames': metadata.get('total_frames'),
             'count': len(frame_numbers),
             'frame_numbers': frame_numbers
@@ -217,14 +227,22 @@ def get_frame_from_set(frame_set_id: str):
     frame_num = frame_numbers[frame_idx]
     frame = processor.get_frame(number = frame_num)
 
+    # Prioritize height resizing (max 720 px)
+    if frame.shape[0] > 720:
+        frame = processor.resize(frame, height = 720)
+
+    # Resize width to max 1280 px
+    if frame.shape[1] > 1280:
+        frame = processor.resize(frame, width = 1280)
+
     return jsonify({
         'frame_set_id': frame_set_id,
         'frame_count': len(frame_numbers),
         'frame_idx': frame_idx,
         'frame_num': frame_num,
         'frame_img': _frame_to_base64(frame),
-        'width': frame.shape[1],
-        'height': frame.shape[0]
+        'render_width': frame.shape[1],
+        'render_height': frame.shape[0]
     })
 
 @app.route('/frame-set/<frame_set_id>/annotations/<int:frame_num>', methods = ['GET'])
