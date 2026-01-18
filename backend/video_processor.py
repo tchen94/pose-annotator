@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 from os import path
 import cv2
 import numpy as np
@@ -25,7 +25,7 @@ class VideoProcessor:
         self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     def __repr__(self):
-        """Return a string representatin of the object."""
+        """Return a string representation of the object."""
         return f"VideoProcessor object for '{self.video_file}' at " \
                f"{self.fps:.2f} Hz"
 
@@ -75,9 +75,70 @@ class VideoProcessor:
             raise ValueError(f"No frame found.")
         return frame
 
+    def resize(
+        self,
+        frames: Union[np.ndarray, list[np.ndarray]],
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+    ) -> np.ndarray:
+        """
+        Resize a video frame to specified dimensions.
+
+        Parameters
+        ----------
+        frames : np.ndarray or list[np.ndarray]
+            The input frame(s) to resize. Can be a single frame as a NumPy
+            array or a list of frames as NumPy arrays.
+        width : int, optional
+            The target width in pixels. If only width is given, the height is
+            calculated to maintain aspect ratio.
+        height : int, optional
+            The target height in pixels. If only height is given, the width is
+            calculated to maintain aspect ratio.
+
+        Returns
+        -------
+        resized_frames : np.ndarray or list[np.ndarray]
+            The resized frame(s) as a NumPy array or list of arrays.
+
+        Notes
+        -----
+        - If both width and height are given, resizes to exact dimensions
+          (may distort if aspect ratio differs).
+        - If only one dimension is provided, calculates the other to maintain
+          aspect ratio.
+        - If neither is provided, returns the original frame unchanged.
+        """
+        is_list = isinstance(frames, list)
+        if not is_list:
+            frames = [frames]
+
+        resized_frames = []
+        for frame in frames:
+
+            # Get original dimensions
+            original_height, original_width = frame.shape[:2]
+
+            if width is None and height is None:
+                resized = frame
+            else:
+                # Calculate missing dimension to maintain aspect ratio
+                if width is None:
+                    aspect_ratio = original_width / original_height
+                    calc_width = int(height * aspect_ratio)
+                    resized = cv2.resize(frame, (calc_width, height))
+                elif height is None:
+                    aspect_ratio = original_width / original_height
+                    calc_height = int(width / aspect_ratio)
+                    resized = cv2.resize(frame, (width, calc_height))
+                else:
+                    resized = cv2.resize(frame, (width, height))
+            resized_frames.append(resized)
+        return resized_frames if is_list else resized_frames[0]
+
     def crop(
         self,
-        frame: np.ndarray,
+        frames: Union[np.ndarray, list[np.ndarray]],
         width_perc: Optional[float] = None,
         height_perc: Optional[float] = None,
         width_px: Optional[int] = None,
@@ -90,8 +151,8 @@ class VideoProcessor:
 
         Parameters
         ----------
-        frame : np.ndarray
-            The input frame to crop.
+        frames : np.ndarray
+            The input frame(s) to crop.
         width_perc : float, optional
             The width as a percentage (0 to 1) of the original frame width.
         height_perc : float, optional
@@ -118,52 +179,60 @@ class VideoProcessor:
         Pixel values take precedence over percentage values if both are
         provided.
         """
-        frame_height, frame_width = frame.shape[:2]
+        is_list = isinstance(frames, list)
+        if not is_list:
+            frames = [frames]
 
-        # Calculate crop width
-        if width_px is not None:
-            crop_width = min(width_px, frame_width)
-        elif width_perc is not None:
-            crop_width = int(frame_width * width_perc)
-        else:
-            crop_width = frame_width
+        cropped_frames = []
+        for frame in frames:
+            frame_height, frame_width = frame.shape[:2]
 
-        # Calculate crop height
-        if height_px is not None:
-            crop_height = min(height_px, frame_height)
-        elif height_perc is not None:
-            crop_height = int(frame_height * height_perc)
-        else:
-            crop_height = frame_height
-
-        # Calculate crop coordinates
-        if from_center:
-            x_start = (frame_width - crop_width) // 2
-            y_start = (frame_height - crop_height) // 2
-        else:
-            x_start = 0
-            y_start = 0
-        x_end = x_start + crop_width
-        y_end = y_start + crop_height
-
-        # Perform the initial crop
-        cropped_frame = frame[y_start:y_end, x_start:x_end]
-
-        # Apply side cropping if specified (only when using percentages)
-        if cropped_side and (
-                width_perc is not None or height_perc is not None):
-            h, w = cropped_frame.shape[:2]
-
-            if cropped_side == 'left':
-                cropped_frame = cropped_frame[:, :w // 2]
-            elif cropped_side == 'right':
-                cropped_frame = cropped_frame[:, w // 2:]
-            elif cropped_side == 'top':
-                cropped_frame = cropped_frame[:h // 2, :]
-            elif cropped_side == 'bottom':
-                cropped_frame = cropped_frame[h // 2:, :]
+            # Calculate crop width
+            if width_px is not None:
+                crop_width = min(width_px, frame_width)
+            elif width_perc is not None:
+                crop_width = int(frame_width * width_perc)
             else:
-                raise ValueError(f"Invalid cropped_side: {cropped_side}. "
-                                 f"Must be 'left', 'right', 'top', or 'bottom'.")
+                crop_width = frame_width
 
-        return cropped_frame
+            # Calculate crop height
+            if height_px is not None:
+                crop_height = min(height_px, frame_height)
+            elif height_perc is not None:
+                crop_height = int(frame_height * height_perc)
+            else:
+                crop_height = frame_height
+
+            # Calculate crop coordinates based on cropped_side
+            if cropped_side:
+                if cropped_side == 'left':
+                    x_start = 0
+                    y_start = 0
+                elif cropped_side == 'right':
+                    x_start = frame_width - crop_width
+                    y_start = 0
+                elif cropped_side == 'top':
+                    x_start = 0
+                    y_start = 0
+                elif cropped_side == 'bottom':
+                    x_start = 0
+                    y_start = frame_height - crop_height
+                else:
+                    raise ValueError(
+                        f"Invalid cropped_side: {cropped_side}. "
+                        f"Must be 'left', 'right', 'top', or 'bottom'.")
+            elif from_center:
+                x_start = (frame_width - crop_width) // 2
+                y_start = (frame_height - crop_height) // 2
+            else:
+                x_start = 0
+                y_start = 0
+
+            x_end = x_start + crop_width
+            y_end = y_start + crop_height
+
+            # Perform the crop
+            cropped = frame[y_start:y_end, x_start:x_end]
+            cropped_frames.append(cropped)
+
+        return cropped_frames if is_list else cropped_frames[0]
