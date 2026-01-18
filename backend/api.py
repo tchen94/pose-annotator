@@ -147,6 +147,10 @@ def upload_and_create_frame_set():
         if frame.shape[1] > 1280:
             frame = processor.resize(frame, width = 1280)
 
+        # Add render dimensions to response
+        resp['render_width'] = frame.shape[1]
+        resp['render_height'] = frame.shape[0]
+
         resp['first_frame'] = {
             'frame_idx': first_index,
             'frame_num': first_frame_num,
