@@ -251,48 +251,32 @@ def get_frame_from_set(frame_set_id: str):
     })
 
 
-@app.route('/frame-set/<frame_set_id>/annotations/export-csv', methods = ['GET'])
-def export_annotations_csv(frame_set_id: str):
+@app.route('/annotations/export-csv', methods = ['POST'])
+def export_annotations_csv():
     """
     Export annotations as a CSV file.
 
     Examples
     --------
-    GET /frame-set/<frame_set_id>/annotations/export-csv
+    POST /annotations/export-csv
     """
     try:
-        meta = _load_meta(frame_set_id)
-
-        # Find the annotations file (ends with _annotations.json)
-        frame_set_dir = os.path.join(FRAMESETS_DIR, frame_set_id)
-        annotations_file = None
-        for filename in os.listdir(frame_set_dir):
-            if filename.endswith('_annotations.json'):
-                annotations_file = os.path.join(frame_set_dir, filename)
-                break
-
-        if not annotations_file or not os.path.exists(annotations_file):
-            return jsonify({'error': 'No annotations found'}), 404
-
-        with open(annotations_file, 'r', encoding = 'utf-8') as f:
-            all_annotations = json.load(f)
+        # Get JSON data from request body
+        all_annotations = request.json
 
         if not all_annotations:
-            return jsonify({'error': 'Could not read JSON'}), 404
+            return jsonify({'error': 'No annotations data provided'}), 400
 
         # Format data for CSV
-        annotations_df = utils.process_annotations(all_annotations)
+        annotations_df, dimensions = utils.process_annotations(all_annotations)
         csv_content = annotations_df.to_csv(index = False)
 
         # Send as downloadable file
         response = make_response(csv_content)
         response.headers['Content-Type'] = 'text/csv; charset=utf-8'
-        response.headers['Content-Disposition'] = f'attachment; filename={frame_set_id}_annotations.csv'
-
+        response.headers['Content-Disposition'] = 'attachment; filename=annotations.csv'
         return response
 
-    except FileNotFoundError:
-        return jsonify({'error': 'Frame set not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
