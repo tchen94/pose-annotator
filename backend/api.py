@@ -62,8 +62,6 @@ def upload_and_create_frame_set():
 
     # Read options from multipart form
     num_frames = request.form.get('num_frames', type = int)
-    if num_frames is None:
-        num_frames = 50
     if num_frames <= 0:
         return jsonify({'error': 'num_frames must be greater than 0'}), 400
 
@@ -268,7 +266,7 @@ def export_annotations_csv():
             return jsonify({'error': 'No annotations data provided'}), 400
 
         # Format data for CSV
-        annotations_df, dimensions = utils.process_annotations(all_annotations)
+        annotations_df = utils.process_annotations(all_annotations)
         csv_content = annotations_df.to_csv(index = False)
 
         # Send as downloadable file
