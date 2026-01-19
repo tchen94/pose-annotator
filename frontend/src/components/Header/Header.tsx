@@ -30,6 +30,8 @@ const Header = () => {
           <a
             key={item.label}
             href={item.link}
+            target="_blank"
+            rel="noopener noreferrer"
             className="ml-4 flex items-center hover:underline"
           >
             <img

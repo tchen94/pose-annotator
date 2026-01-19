@@ -38,7 +38,7 @@ export const drawAnnotations = (
 
       // Draw circle
       ctx.beginPath();
-      ctx.arc(canvasX, canvasY, 5, 0, 2 * Math.PI);
+      ctx.arc(canvasX, canvasY, 3, 0, 2 * Math.PI);
       ctx.fillStyle = color;
       ctx.fill();
       ctx.strokeStyle = color;

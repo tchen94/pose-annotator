@@ -117,7 +117,7 @@ const Toolbar = () => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${videoData?.video_id}_annotations.json`;
+      link.download = `${videoData?.video_id}_annotations.csv`;
 
       // Trigger the download
       document.body.appendChild(link);
