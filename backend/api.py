@@ -1,8 +1,9 @@
-from flask import Flask, request, jsonify
+from flask import Flask, make_response, request, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from video_processor import VideoProcessor
 import os
+import utils
 import cv2
 import numpy as np
 import base64
@@ -249,73 +250,52 @@ def get_frame_from_set(frame_set_id: str):
         'render_height': frame.shape[0]
     })
 
-@app.route('/frame-set/<frame_set_id>/annotations/<int:frame_num>', methods = ['GET'])
-def load_annotations(frame_set_id: str, frame_num: int):
-    """Load saved annotations for a specific frame number. Returns {} if no
-    annotations for the frame exist.
+
+@app.route('/frame-set/<frame_set_id>/annotations/export-csv', methods = ['GET'])
+def export_annotations_csv(frame_set_id: str):
+    """
+    Export annotations as a CSV file.
+
+    Examples
+    --------
+    GET /frame-set/<frame_set_id>/annotations/export-csv
     """
     try:
-        _ = _load_meta(frame_set_id)
+        meta = _load_meta(frame_set_id)
 
-        annotations_path = os.path.join(
-            FRAMESETS_DIR, frame_set_id, 'annotations', f'{frame_num}.json'
-        )
-        if not os.path.exists(annotations_path):
-            return jsonify({
-                'frame_set_id': frame_set_id,
-                'frame_num': frame_num,
-                'annotations': {}
-            })
+        # Find the annotations file (ends with _annotations.json)
+        frame_set_dir = os.path.join(FRAMESETS_DIR, frame_set_id)
+        annotations_file = None
+        for filename in os.listdir(frame_set_dir):
+            if filename.endswith('_annotations.json'):
+                annotations_file = os.path.join(frame_set_dir, filename)
+                break
 
-        with open(annotations_path, 'r', encoding = 'utf-8') as f:
-            ann = json.load(f)
+        if not annotations_file or not os.path.exists(annotations_file):
+            return jsonify({'error': 'No annotations found'}), 404
 
-        return jsonify({
-            'frame_set_id': frame_set_id,
-            'frame_num': frame_num,
-            'annotations': ann
-        })
+        with open(annotations_file, 'r', encoding = 'utf-8') as f:
+            all_annotations = json.load(f)
+
+        if not all_annotations:
+            return jsonify({'error': 'Could not read JSON'}), 404
+
+        # Format data for CSV
+        annotations_df = utils.process_annotations(all_annotations)
+        csv_content = annotations_df.to_csv(index = False)
+
+        # Send as downloadable file
+        response = make_response(csv_content)
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+        response.headers['Content-Disposition'] = f'attachment; filename={frame_set_id}_annotations.csv'
+
+        return response
 
     except FileNotFoundError:
         return jsonify({'error': 'Frame set not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
-@app.route('/frame-set/<frame_set_id>/annotations/<int:frame_num>', methods = ['PUT'])
-def save_annotations(frame_set_id, frame_num: int):
-    """Save annotations JSON for a specific frame number to:
-    data/frame_sets/<frame_set_id>/annotations/<frame_num>.json
-    """
-    try:
-        _ = _load_meta(frame_set_id)
-
-        data = request.json
-        if data is None:
-            return jsonify({'error': 'Expected JSON body'}), 400
-
-        ann_dir = os.path.join(FRAMESETS_DIR, frame_set_id, 'annotations')
-        os.makedirs(ann_dir, exist_ok = True)
-        annotations_path = os.path.join(ann_dir, f'{frame_num}.json')
-
-        payload = {
-            'frame_set_id': frame_set_id,
-            'frame_num': frame_num,
-            **data
-        }
-
-        with open(annotations_path, 'w', encoding = 'utf-8') as f:
-            json.dump(payload, f, indent = 2)
-
-        return jsonify({
-            'frame_set_id': frame_set_id,
-            'frame_num': frame_num
-        })
-
-    except FileNotFoundError:
-        return jsonify({'error': 'Frame set not found'}), 404
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods = ['GET'])
 def health_check():
