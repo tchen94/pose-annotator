@@ -31,5 +31,3 @@
 - Export frame annotations to a **CSV** file
 
 <img src="ui-demo.gif" alt="Pose Annotator Demo" style="max-width: 100%; height: auto;" />
-
-<hr>
