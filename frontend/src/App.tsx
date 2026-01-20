@@ -1,11 +1,13 @@
-import AppContainer from "./containers/AppContainer";
-import VideoProvider from "./providers/VideoProvider";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import AppRoutes from "./routes/routes";
 
 function App() {
   return (
-    <VideoProvider>
-      <AppContainer />
-    </VideoProvider>
+    <div className="w-screen h-screen">
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </div>
   );
 }
 

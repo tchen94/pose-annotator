@@ -1,5 +1,6 @@
 import GitHubICon from "../../assets/github.svg";
 import Logo from "../../assets/logo.png";
+import useTokenContext from "../../providers/useTokenContext";
 
 interface HeaderItem {
   label: string;
@@ -16,14 +17,17 @@ const HEADER_RIGHT_ITEMS: HeaderItem[] = [
 ];
 
 const Header = () => {
+  const token = useTokenContext();
   return (
     <header className="flex items-center justify-between w-[95%] h-14 mx-auto mx-18 mt-4 py-2 pt-6">
       <div className="text-2xl font-bold">
-        <img
-          src={Logo}
-          alt="Logo"
-          className="h-8 inline mr-2 transform scale-200 ml-14"
-        />
+        <a key="home" href={`/annotate/${token}`}>
+          <img
+            src={Logo}
+            alt="Logo"
+            className="h-8 inline mr-2 transform scale-200 ml-14"
+          />
+        </a>
       </div>
       {HEADER_RIGHT_ITEMS.map((item) => {
         return (

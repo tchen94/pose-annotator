@@ -2,11 +2,14 @@ import toast, { Toaster } from "react-hot-toast";
 import LeftArrow from "../../assets/left-arrow.svg";
 import RightArrow from "../../assets/right-arrow.svg";
 import PenAnnotation from "../../assets/pen-annotate.svg";
-// import Save from "../../assets/save.svg";
+import Save from "../../assets/save.svg";
 import Export from "../../assets/export.svg";
 import useVideoContext from "../../providers/useVideoContext";
 import { BODY_PART } from "../../constants/constants";
 import type { BodyPartAnnotations } from "../../constants/types";
+import { useMutation } from "@tanstack/react-query";
+import { saveAnnotations } from "../../api/annotations";
+import useTokenContext from "../../providers/useTokenContext";
 
 interface CanvasControl {
   label: string;
@@ -29,6 +32,8 @@ const Toolbar = () => {
     annotations,
     setAnnotations,
   } = useVideoContext();
+
+  const token = useTokenContext();
 
   const isFrameComplete = (frame: number) => {
     const frameAnnotations = annotations[frame];
@@ -77,7 +82,7 @@ const Toolbar = () => {
     if (!videoData) return;
 
     if (!isFrameComplete(currentFrameNumber)) {
-      toast.error("Missing annotations");
+      toast.error("Missing annotation(s)");
       return;
     }
 
@@ -91,6 +96,33 @@ const Toolbar = () => {
 
   const handleToggleAnnotationMode = () => {
     setAnnotationMode(!annotationMode);
+  };
+
+  const { mutate: saveAnnotationsMutation, isPending } = useMutation({
+    mutationFn: saveAnnotations,
+    onSuccess: () => {
+      toast.success("Annotations saved successfully");
+    },
+    onError: (error) => {
+      toast.error("Failed to save annotations");
+      console.error(`Error saving annotations: ${error}`);
+    },
+  });
+
+  const handleSaveAnnotations = async () => {
+    if (!videoData) return;
+
+    saveAnnotationsMutation({
+      frame_set_id: videoData.frame_set_id,
+      video_id: videoData.video_id,
+      orig_width: videoData.orig_width,
+      orig_height: videoData.orig_height,
+      render_width: videoData.render_width,
+      render_height: videoData.render_height,
+      annotations: annotations,
+      last_frame_annotated: currentFrameNumber,
+      token: token || undefined,
+    });
   };
 
   const exportVideoAnnotations = async () => {
@@ -136,34 +168,34 @@ const Toolbar = () => {
   const CANVAS_CONTROLS: CanvasControl[] = [
     {
       label: "Step Back",
-      className: "px-4 py-2 bg-gray-500 rounded hover:bg-gray-700",
+      className: "px-4 py-2 bg-[#B8E6D5] rounded hover:bg-[#A3D9C7]",
       icon: LeftArrow,
       onClick: handleStepBack,
     },
     {
       label: "Step Forward",
-      className: "px-4 py-2 bg-gray-500 rounded hover:bg-gray-700",
+      className: "px-4 py-2 bg-[#B8E6D5] rounded hover:bg-[#A3D9C7]",
       icon: RightArrow,
       onClick: handleStepForward,
     },
     {
       label: "Annotate",
       className: annotationMode
-        ? "px-4 py-2 bg-gray-700 rounded ring-2 ring-blue-400 shadow-md shadow-blue-100/50"
-        : "px-4 py-2 bg-gray-500 rounded hover:bg-gray-700",
+        ? "px-4 py-2 bg-[#A3D9C7] rounded ring-2 ring-red shadow-lg shadow-red-200/50"
+        : "px-4 py-2 bg-[#B8E6D5] rounded hover:bg-[#A3D9C7]",
       icon: PenAnnotation,
       onClick: handleToggleAnnotationMode,
       active: annotationMode,
     },
-    // TODO: TBD IF WE WILL NEED TO IMPLEMENT THIS, ANJA TO DECIDE
-    // {
-    //   label: "Save",
-    //   className: "px-4 py-2 bg-gray-500 rounded hover:bg-gray-700",
-    //   icon: Save,
-    // },
+    {
+      label: "Save",
+      className: `px-4 py-2 bg-[#B8E6D5] rounded hover:bg-[#A3D9C7] ${isPending ? "opacity-50" : ""}`,
+      icon: Save,
+      onClick: handleSaveAnnotations,
+    },
     {
       label: "Export",
-      className: "px-4 py-2 bg-gray-500 rounded hover:bg-gray-700",
+      className: "px-4 py-2 bg-[#B8E6D5] rounded hover:bg-[#A3D9C7]",
       icon: Export,
       onClick: exportVideoAnnotations,
     },
@@ -180,11 +212,7 @@ const Toolbar = () => {
             title={control.label}
             onClick={control.onClick}
           >
-            <img
-              src={control.icon}
-              alt={control.label}
-              className="w-5 h-5 invert"
-            />
+            <img src={control.icon} alt={control.label} className="w-5 h-5" />
           </button>
         ))}
       </div>
