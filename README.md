@@ -53,21 +53,100 @@ python3 --version
 py --version
 ```
 
-### 2) Download Pose Annotator
+### 2) Install PostgreSQL
 
-1. Download the `pose-annotator-run-local.zip` from this repo.
-2. Unzip it to your desired location on your computer.
+1. Download the latest version of PostgreSQL from: https://www.postgresql.org/download/
+2. Follow the installation instructions for your operating system.
+3. During installation, create a password for the default `postgres` user.
+4. After installation, ensure that the PostgreSQL server is running.
+5. Install pgAdmin (usually included in the PostgreSQL installer) to manage your databases.
+6. Open pgAdmin and connect to your PostgreSQL server using the `postgres` user
+   and the password you created during installation.
+7. Create a new database named `pose_annotator`.
+8. Make sure the database server is running before starting Pose Annotator, using pSQL in pgAdmin:
+   ```bash
+    \dt # Lists all databases in the current database
+   ```
+   You can check the status with:
+   ```bash
+    \conninfo # Displays information about current connections
+    SHOW port; # Displays the port number PostgreSQL is listening on
+   ```
 
-### 3) Start Pose Annotator
+### 3) Start Pose Annotator Locally
 
-**macOS** users should double-click on the `start.command` file.
-**Windows** users should double-click on the `start.bat` file.
+1. Fork and clone this repository
+2. Navigate to the `backend` directory and create a virtual environment:
 
-**Linux** users should run the following from their command line:
+   **macOS / Linux**
 
-```bash
-bash start.sh
-```
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
 
-Your browser should open automatically. If not, open your browser and
-navigate to: http://localhost:8000
+   **Windows**
+
+   ```bat
+   py -m venv venv
+   venv\Scripts\activate
+   ```
+
+3. Install the required Python packages:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+**Make sure the PostgreSQL server is running and the `pose_annotator` database is created. Or else the backend server will not start properly.**
+
+4. Create a `.env` file in the `backend` directory and create a `DATABASE_URL` variable with your PostgreSQL connection details:
+
+   ```env
+   DATABASE_URL=postgresql://<username>:<password>@localhost:5432/pose_annotator
+   ```
+
+   Replace `<username>` and `<password>` with your PostgreSQL credentials.
+
+5. Start the backend server:
+
+   ```bash
+    python api.py
+   ```
+
+   You should see the following output in the terminal:
+
+   ```bash
+   Database initialized successfully.
+    * Serving Flask app 'pose-annotator-backend'
+    * Debug mode: on
+   WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+    * Running on http://127.0.0.1:8000
+   Press CTRL+C to quit
+   ```
+
+<b>Please make sure you have Node 22+ installed before proceeding. Find the latest download here: https://nodejs.org/en/download.</b>
+
+6. Open a new terminal window, navigate to the `frontend` directory, and install
+   the required Node.js packages:
+
+   ```bash
+    npm install
+   ```
+
+7. Start the frontend development server:
+
+   ```bash
+   npm run dev
+   ```
+
+   You should see the following output in the terminal:
+
+   ```bash
+    VITE <whatever-version-you-have>  ready in <some-time> ms
+
+    ➜  Local:   http://localhost:5173/
+    ➜  Network: use --host to expose
+   ```
+
+Open your web browser and navigate to `http://localhost:5173/` to access Pose Annotator.
