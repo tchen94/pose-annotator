@@ -61,7 +61,7 @@ const CheckList = () => {
     <>
       {videoData && (
         <div>
-          <div className="checklist-container overflow-y-auto h-fit border border-gray-500 mt-8 mr-2 rounded-lg mt-30">
+          <div className="checklist-container overflow-y-auto h-fit border border-gray-500 mr-2 rounded-lg mt-18">
             <table className="table-auto border-collapse">
               <thead className="sticky top-0">
                 <tr className="bg-gray-600">

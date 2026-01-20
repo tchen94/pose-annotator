@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import toast, { Toaster } from "react-hot-toast";
+import FooterContainer from "../../containers/FooterContainer";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -44,9 +45,10 @@ const GetAccessPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#242424] flex items-center justify-center p-6">
+    <div className="w-full h-full bg-[#242424] flex flex-col">
       <Toaster position="top-center" />
-      <div className="bg-[#2a2a2a] rounded-lg shadow-2xl p-8 max-w-md w-full border border-gray-700">
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="bg-[#2a2a2a] rounded-lg shadow-2xl p-8 max-w-md w-full border border-gray-700">
         <h1 className="text-3xl font-bold mb-6 text-white text-center">
           Get Access
         </h1>
@@ -108,6 +110,8 @@ const GetAccessPage = () => {
           )}
         </div>
       </div>
+    </div>
+    <FooterContainer />
     </div>
   );
 };

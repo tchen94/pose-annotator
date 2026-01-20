@@ -3,7 +3,7 @@ import HeaderContainer from "./HeaderContainer";
 
 const AppContainer = () => {
   return (
-    <div className="w-screen h-screen overflow-y-auto flex flex-col">
+    <div className="w-full h-full flex flex-col">
       <HeaderContainer />
       <VideoContainer />
     </div>

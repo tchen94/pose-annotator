@@ -260,7 +260,7 @@ const VideoPlayer = () => {
   return (
     <div className="flex-1 mx-auto px-6">
       {videoData ? (
-        <div className="mt-30">
+        <div className="mt-18">
           <div className="relative mt-8 mx-auto w-fit leading-[0]">
             <img
               src={`data:image/jpeg;base64,${currentFrame}`}

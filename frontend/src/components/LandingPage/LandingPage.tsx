@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
 import logo from "../../assets/logo.png";
 import GithubIcon from "../../assets/github.svg";
+import FooterContainer from "../../containers/FooterContainer";
 
 const LandingPage = () => {
   return (
-    <div className="w-full h-full bg-[#242424] relative">
+    <div className="w-full h-full bg-[#242424] relative flex flex-col">
       {/* GitHub Link - Top Right */}
       <div className="absolute top-6 right-6">
         <a
@@ -22,7 +23,7 @@ const LandingPage = () => {
       </div>
 
       {/* Main Content */}
-      <div className="w-full h-full flex items-center justify-center">
+      <div className="w-full flex-1 flex items-center justify-center">
         <div className="max-w-2xl mx-auto text-center px-8">
           {/* Logo */}
           <img
@@ -44,6 +45,7 @@ const LandingPage = () => {
           </Link>
         </div>
       </div>
+      <FooterContainer />
     </div>
   );
 };
