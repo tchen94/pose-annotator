@@ -1,5 +1,6 @@
-from flask import Flask, make_response, request, jsonify
+from flask import Flask, make_response, send_from_directory, request, jsonify
 from flask_cors import CORS
+from pathlib import Path
 from werkzeug.utils import secure_filename
 from video_processor import VideoProcessor
 import os
@@ -24,8 +25,16 @@ utils.cleanup_data()
 os.makedirs(VIDEOS_DIR, exist_ok = True)
 os.makedirs(FRAMESETS_DIR, exist_ok = True)
 
+ROOT = Path(__file__).resolve().parent.parent  # repo root
+DIST_DIR = ROOT / 'frontend'/ 'dist'
+ASSETS_DIR = DIST_DIR / 'assets'
+
 # Create Flask app
-app = Flask('pose-annotator-backend')
+app = Flask(
+    'pose-annotator',
+    static_folder = str(DIST_DIR),
+    static_url_path = ''
+)
 CORS(app)
 
 # Store video processors and frame sets in memory (cache)
@@ -171,8 +180,8 @@ def get_frame_set_info(frame_set_id: str):
             'frame_set_id': metadata.get('frame_set_id'),
             'video_id': metadata.get('video_id'),
             'fps': metadata.get('fps'),
-            'orig_width': metadata.get('orig_width'),
-            'orig_height': metadata.get('orig_height'),
+            'orig_width': metadata.get('width'),
+            'orig_height': metadata.get('height'),
             'total_frames': metadata.get('total_frames'),
             'count': len(frame_numbers),
             'frame_numbers': frame_numbers
@@ -244,7 +253,6 @@ def get_frame_from_set(frame_set_id: str):
         'render_height': frame.shape[0]
     })
 
-
 @app.route('/annotations/export-csv', methods = ['POST'])
 def export_annotations_csv():
     """
@@ -274,12 +282,31 @@ def export_annotations_csv():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/health', methods = ['GET'])
 def health_check():
     """Health check endpoint."""
     return jsonify({'status': 'ok'})
 
+@app.route('/', defaults = {'path': ''})
+@app.route('/<path:path>')
+def serve_react_app(path: str):
+    """Serve Vite assets and SPA fallback."""
+    # If the path is an API route, 404 here (or just let Flask route matching handle it)
+    if path.startswith("frame-set") or path.startswith("annotations") or path.startswith("health"):
+        return jsonify({"error": "Not found"}), 404
+
+    # Serve actual file if it exists (e.g., /assets/index-xyz.js)
+    requested = DIST_DIR / path
+    if path != "" and requested.exists() and requested.is_file():
+        return send_from_directory(DIST_DIR, path)
+
+    # Otherwise serve SPA entrypoint
+    return send_from_directory(DIST_DIR, "index.html")
+
+def _env_flag(name: str, default: str = "0") -> bool:
+    return os.environ.get(name, default).strip().lower() in ("1", "true", "yes", "y", "on")
 
 if __name__ == '__main__':
-    app.run(debug = True, port = 8000)
+    debug = _env_flag('DEBUG', '0')
+    port = int(os.environ.get('PORT', '8000'))
+    app.run(host = '127.0.0.1', port = port, debug = debug)
