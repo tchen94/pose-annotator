@@ -11,16 +11,22 @@ import random
 import uuid
 import json
 
-app = Flask(__name__)
-CORS(app)
-
 # ============================== CONFIGURATION ===============================
 DATA_DIR = 'data'
 VIDEOS_DIR = os.path.join(DATA_DIR, 'videos')
 FRAMESETS_DIR = os.path.join(DATA_DIR, 'frame_sets')
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
+
+
+# ================================== STARTUP =================================
+# Cleanup data directory at startup
+utils.cleanup_data()
 os.makedirs(VIDEOS_DIR, exist_ok = True)
 os.makedirs(FRAMESETS_DIR, exist_ok = True)
+
+# Create Flask app
+app = Flask('pose-annotator-backend')
+CORS(app)
 
 # Store video processors and frame sets in memory (cache)
 video_processors = {}  # video_id -> VideoProcessor

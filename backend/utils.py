@@ -1,4 +1,19 @@
+import os
+import shutil
 import pandas as pd
+
+def cleanup_data() -> None:
+    """Clear all files in the 'backend/data' directory."""
+    if os.path.exists('./data'):
+        try:
+            for item in os.listdir('./data'):
+                item_path = os.path.join('./data', item)
+                if os.path.isfile(item_path):
+                    os.unlink(item_path)
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+        except Exception:
+            pass
 
 def process_annotations(data: dict) -> pd.DataFrame:
     """
