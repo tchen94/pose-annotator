@@ -8,6 +8,8 @@
   <br>
 
   <img src="https://badgen.net/badge/python/3.12%2B/blue" alt="Python 3.12+">
+  <img src="https://badgen.net/badge/nodejs/22%2B/green" alt="Node.js 22+">
+  <img src="https://badgen.net/badge/postgresql/15%2B/cyan" alt="PostgreSQL 15+">
   <img src="https://badgen.net/badge/license/MIT/orange" alt="MIT License">
 
   <br>
