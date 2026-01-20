@@ -1,5 +1,6 @@
 flask==3.0.3
 flask-cors==6.0.2
+gunicorn==23.0.0
 numpy==1.26.4
 opencv-python==4.11.0.86
 psycopg2-binary==2.9.9
