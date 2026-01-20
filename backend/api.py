@@ -160,13 +160,8 @@ def upload_and_create_frame_set():
 
         frame = processor.get_frame(number = first_frame_num)
 
-        # Prioritize height resizing (max 720 px)
-        if frame.shape[0] > 720:
-            frame = processor.resize(frame, height = 720)
-
-        # Resize width to max 1280 px
-        if frame.shape[1] > 1280:
-            frame = processor.resize(frame, width = 1280)
+        # Resize to max height = 720 px
+        frame = processor.resize(frame, height = 720)
 
         # Add render dimensions to response
         resp['render_width'] = frame.shape[1]
@@ -252,13 +247,8 @@ def get_frame_from_set(frame_set_id: str):
     frame_num = frame_numbers[frame_idx]
     frame = processor.get_frame(number = frame_num)
 
-    # Prioritize height resizing (max 720 px)
-    if frame.shape[0] > 720:
-        frame = processor.resize(frame, height = 720)
-
-    # Resize width to max 1280 px
-    if frame.shape[1] > 1280:
-        frame = processor.resize(frame, width = 1280)
+    # Resize to max height = 720 px
+    frame = processor.resize(frame, height = 720)
 
     return jsonify({
         'frame_set_id': frame_set_id,
