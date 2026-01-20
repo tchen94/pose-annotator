@@ -2,6 +2,7 @@ from flask import Flask, make_response, request, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from video_processor import VideoProcessor
+from dotenv import load_dotenv
 import os
 import utils
 import cv2
@@ -11,8 +12,29 @@ import random
 import uuid
 import json
 
-app = Flask(__name__)
+# ============================= INITIALIZATION ==============================
+# Load environment variables
+load_dotenv()
+
+# Import database functions
+try:
+    from database.database import (
+        init_db, save_annotation_session, save_frame_annotation,
+        update_session_progress, load_annotation_session,
+        list_annotation_sessions, delete_annotation_session,
+        create_user_token, validate_user_token
+    )
+    DB_AVAILABLE = True
+except Exception as e:
+    print(f"Database not available: {e}")
+    DB_AVAILABLE = False
+
+app = Flask("pose-annotator-backend")
 CORS(app)
+
+# Initatlize database on startup
+if DB_AVAILABLE:
+    init_db()
 
 # ============================== CONFIGURATION ===============================
 DATA_DIR = 'data'
@@ -72,7 +94,7 @@ def upload_and_create_frame_set():
     filename = secure_filename(file.filename)
     ext = os.path.splitext(filename)[1].lower()
     base = os.path.splitext(filename)[0]
-    video_id = f'{base}_{uuid.uuid4().hex[:8]}'
+    video_id = base
     video_path = os.path.join(VIDEOS_DIR, f'{video_id}{ext}')
     file.save(video_path)
 
@@ -277,7 +299,315 @@ def export_annotations_csv():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+# ================================ANNOTATION ENDPOINTS===============================
 
+@app.route('/annotations/save', methods = ['POST'])
+def save_annotations():
+    """
+    Saves all annotations for a frame set.
+
+    Expected JSON body:
+    {
+        "frame_set_id": str,
+        "video_id": str,
+        "orig_width": int,
+        "orig_height": int,
+        "rendered_width": int,
+        "rendered_height": int,
+        "total_frames": int,
+            "annotations": {
+                "123": { "nose": { "x": 100, "y": 200, "not_visible": false }, ... },
+                "456": { ... }
+        }
+    }
+    """
+    if not DB_AVAILABLE:
+        return jsonify({'error': 'Database not available'}), 503
+    
+    try:
+        data = request.json
+        frame_set_id = data.get('frame_set_id')
+        video_id = data.get('video_id')
+        annotations = data.get('annotations', {})
+
+        if not frame_set_id or not video_id:
+            return jsonify({'error': 'frame_set_id and video_id are required'}), 400
+        
+        # Extract dimension metadata
+        orig_width = data.get('orig_width') or annotations.get('orig_width')
+        orig_height = data.get('orig_height') or annotations.get('orig_height')
+        rendered_width = data.get('rendered_width') or annotations.get('rendered_width')
+        rendered_height = data.get('rendered_height') or annotations.get('rendered_height')
+
+        # Count total frames (exluding the metadata fields)
+        metadata_keys = {'orig_width', 'orig_height', 'rendered_width', 'rendered_height'}
+        frame_annotations = {k: v for k, v in annotations.items() if k not in metadata_keys and isinstance(v, dict)}
+        last_frame_annotated = data.get('last_frame_annotated', 0)
+        total_frames = _load_meta(frame_set_id).get('num_frames', len(frame_annotations))
+
+        if total_frames == 0:
+            return jsonify({'error': 'No frame annotations provided'}), 400
+        
+        # Add token param
+        token = data.get('token') or request.args.get('token')
+
+        # Validate token
+        if token and not validate_user_token(token):
+            return jsonify({'error': 'Invalid user token'}), 401
+        
+        # Save or update annotation session
+        save_annotation_session(
+            frame_set_id, video_id, orig_width, orig_height,
+            rendered_width, rendered_height, total_frames, last_frame_annotated, user_token=token
+        )
+
+        # Save each frame's annotations
+        saved_count = 0
+        for frame_num_str, frame_data in frame_annotations.items():
+            try:
+                frame_num = int(frame_num_str)
+            except ValueError:
+                continue # Skip invalid frame numbers
+
+            # Check if frame is complete
+            is_complete = all(
+                (ann.get('x') is not None and ann.get('y') is not None and
+                 not ann.get('not_visible')) or ann.get('not_visible')
+                 for ann in frame_data.values()
+            )
+
+            save_frame_annotation(frame_set_id, frame_num, frame_data, is_complete)
+            saved_count += 1
+        
+        # Update session progress
+        update_session_progress(frame_set_id)
+
+        return jsonify({
+            'success': True,
+            'message': f'Saved {saved_count} frames',
+            'frame_set_id': frame_set_id
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/annotations/load/<frame_set_id>', methods = ['GET'])
+def load_annotations(frame_set_id: str):
+    """
+    Load annotations for a given frame set.
+    """
+    if not DB_AVAILABLE:
+        return jsonify({'error': 'Database not available'}), 503
+    
+    try:
+        token = request.args.get('token')
+
+        # Validate token
+        if token and not validate_user_token(token):
+            return jsonify({'error': 'Invalid user token'}), 401
+
+        data = load_annotation_session(frame_set_id)
+
+        if not data:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        session = data['session']
+
+        # Check if session belongs to this user
+        if token and session.get('user_token') != token:
+            return jsonify({'error': 'Unauthorized to access this session'}), 403
+
+        frames = data['frames']
+
+        # Reconstruct annotations object
+        annotations = {
+            'orig_width': session.get('orig_width'),
+            'orig_height': session.get('orig_height'),
+            'rendered_width': session.get('rendered_width'),
+            'rendered_height': session.get('rendered_height')
+        }
+
+        for frame in frames:
+            annotations[str(frame['frame_num'])] = frame['annotations']
+        
+        return jsonify({
+            'success': True,
+            'frame_set_id': frame_set_id,
+            'video_id': session['video_id'],
+            'annotations': annotations,
+            'session_info': {
+                'created_at': session['created_at'].isoformat() if session.get('created_at') else None,
+                'updated_at': session['updated_at'].isoformat() if session.get('updated_at') else None,
+                'total_frames': session['total_frames'],
+                'annotated_frames': session['annotated_frames'],
+                'last_frame_annotated': session['last_frame_annotated'],
+                'status': session['status']
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/annotations/sessions', methods=['GET'])
+def get_annotation_sessions():
+    """ List all annotation sessions. """
+    if not DB_AVAILABLE:
+        return jsonify({'error': 'Database not available'}), 503
+    
+    try:
+        token = request.args.get('token')
+
+        # Validate token
+        if token and not validate_user_token(token):
+            return jsonify({'error': 'Invalid user token'}), 401
+
+        limit = request.args.get('limit', default=50, type=int)
+        sessions = list_annotation_sessions(limit, user_token=token)
+
+        # Convert datetime objects to ISO format strings
+        for session in sessions:
+            if session.get('created_at'):
+                session['created_at'] = session['created_at'].isoformat()
+            if session.get('updated_at'):
+                session['updated_at'] = session['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'sessions': sessions
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/annotations/session/<frame_set_id>', methods=['DELETE'])
+def delete_session(frame_set_id: str):
+    """ Delete an annotation session. """
+    if not DB_AVAILABLE:
+        return jsonify({'error': 'Database not available'}), 503
+    
+    try:
+        token = request.args.get('token') or request.json.get('token') if request.json else None
+
+        # Validate token
+        if token and not validate_user_token(token):
+            return jsonify({'error': 'Invalid user token'}), 401
+
+        # Optional: Verify the session belongs to this user before deleting
+        if token:
+            session_data = load_annotation_session(frame_set_id)
+            if session_data and session_data['session'].get('user_token') != token:
+                return jsonify({'error': 'Unauthorized to delete this session'}), 403
+
+        deleted = delete_annotation_session(frame_set_id)
+
+        if not deleted:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'message': f"Annotation session {frame_set_id} deleted"
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/annotations/auto-save', methods=['POST'])
+def auto_save_frame():
+    """
+    Auto-save a single frame's annotations.
+    
+    Expected JSON body:
+    {
+        "frame_set_id": "...",
+        "video_id": "...",
+        "frame_num": 123,
+        "annotations": { "nose": {...}, "left_eye": {...}, ... },
+        "orig_width": 1920,
+        "orig_height": 1080,
+        "render_width": 1280,
+        "render_height": 720,
+        "total_frames": 10
+    }
+    """
+    if not DB_AVAILABLE:
+        return jsonify({'error': 'Database not available'}), 503
+    
+    try:
+        data = request.json
+        frame_set_id = data.get('frame_set_id')
+        video_id = data.get('video_id')
+        frame_num = data.get('frame_num')
+        annotations = data.get('annotations', {})
+
+        if not all([frame_set_id, video_id, frame_num is not None]):
+            return jsonify({'error': f"Missing required fields"}), 400
+        
+        # Get and validate token
+        token = data.get('token') or request.args.get('token')
+        if token and not validate_user_token(token):
+            return jsonify({'error': 'Invalid user token'}), 401
+        
+        # Check if session exists
+        save_annotation_session(
+            frame_set_id, video_id,
+            data.get('orig_width'), data.get('orig_height'),
+            data.get('render_width'), data.get('render_height'),
+            data.get('total_frames', 0),
+            data.get('last_frame_annotated', 0),
+            user_token=token  # Add this
+        )
+
+        # Check if frame is complete
+        is_complete = all(
+            (ann.get('x') is not None and ann.get('y') is not None and
+             not ann.get('not_visible')) or ann.get('not_visible')
+             for ann in annotations.values()
+        )
+
+        save_frame_annotation(frame_set_id, frame_num, annotations, is_complete)
+
+        return jsonify({
+            'success': True,
+            'message': f'Auto-saved frame {frame_num} for frame set {frame_set_id}'
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+# ============================= USER MANAGEMENT =============================
+
+@app.route('/admin/generate-token', methods = ['POST'])
+def generate_user_token():
+    """ Generate a unique token for a user. """
+    
+    try:
+        token = create_user_token()
+        # Use frontend URL instead of backend URL
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+        return jsonify({
+            'success': True,
+            'token': token,
+            'link': f"{frontend_url}/annotate/{token}"
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/validate-token/<token>', methods = ['GET'])
+def check_token(token: str):
+    """ Validate a user token. """
+    try:
+        is_valid = validate_user_token(token)
+        if is_valid:
+            return jsonify({
+                'success': True,
+            })
+        
+        return jsonify({'valid': False}), 401
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+# ================================ HEALTH CHECK ==============================
 
 @app.route('/health', methods = ['GET'])
 def health_check():
