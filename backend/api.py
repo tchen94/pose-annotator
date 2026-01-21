@@ -53,7 +53,7 @@ def _frame_to_base64(frame: np.ndarray) -> bytes:
     return base64.b64encode(buffer).decode('utf-8')
 
 def _load_meta(frame_set_id: str) -> dict:
-    path = os.path.join(FRAMESETS_DIR, frame_set_id, 'meta.json')
+    path = os.path.join(FRAMESETS_DIR, f'{frame_set_id}_meta.json')
     if not os.path.exists(path):
         raise FileNotFoundError('Frame set not found')
     with open(path, 'r', encoding = 'utf-8') as f:
@@ -109,11 +109,6 @@ def upload_and_create_frame_set():
     # Create frame_set_id
     frame_set_id = uuid.uuid4().hex
 
-    # Persist frame set on disk
-    frame_set_dir = os.path.join(FRAMESETS_DIR, frame_set_id)
-    annotations_dir = os.path.join(frame_set_dir, 'annotations')
-    os.makedirs(annotations_dir, exist_ok = True)
-
     meta = {
         'frame_set_id': frame_set_id,
         'video_id': video_id,
@@ -126,7 +121,7 @@ def upload_and_create_frame_set():
         'frame_numbers': frame_numbers
     }
 
-    with open(os.path.join(frame_set_dir, 'meta.json'), 'w',
+    with open(os.path.join(FRAMESETS_DIR, f'{frame_set_id}_meta.json'), 'w',
               encoding = 'utf-8') as f:
         json.dump(meta, f, indent = 2)
 
