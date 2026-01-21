@@ -187,8 +187,8 @@ def get_frame_set_info(frame_set_id: str):
             'frame_set_id': metadata.get('frame_set_id'),
             'video_id': metadata.get('video_id'),
             'fps': metadata.get('fps'),
-            'orig_width': metadata.get('orig_width'),
-            'orig_height': metadata.get('orig_height'),
+            'orig_width': metadata.get('width'),
+            'orig_height': metadata.get('height'),
             'total_frames': metadata.get('total_frames'),
             'count': len(frame_numbers),
             'frame_numbers': frame_numbers
@@ -597,12 +597,18 @@ def check_token(token: str):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
-# ================================ HEALTH CHECK ==============================
+# ========================== HEALTH CHECK & DEBUGGING ========================
 
 @app.route('/health', methods = ['GET'])
 def health_check():
     """Health check endpoint."""
     return jsonify({'status': 'ok'})
+
+@app.route('/debug/meta/<frame_set_id>')
+def debug_meta(frame_set_id):
+    path = os.path.join(FRAMESETS_DIR, frame_set_id, 'meta.json')
+    exists = os.path.exists(path)
+    return jsonify({'exists': exists, 'path': path})
 
 
 if __name__ == '__main__':
