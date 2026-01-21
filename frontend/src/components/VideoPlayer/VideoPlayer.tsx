@@ -57,7 +57,7 @@ const VideoPlayer = () => {
     form.append("video", selectedFile);
     form.append("num_frames", numOfFrames.toString());
 
-    const response = await fetch("http://localhost:8000/frame-set", {
+    const response = await fetch(`${API_URL}/frame-set`, {
       method: "POST",
       body: form,
     });
