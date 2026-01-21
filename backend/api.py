@@ -120,6 +120,9 @@ def upload_and_create_frame_set():
     # Persist frame set on disk
     frame_set_dir = os.path.join(FRAMESETS_DIR, frame_set_id)
 
+    # Create frame_sets directory
+    os.makedirs(frame_set_dir, exist_ok=True)
+
     meta = {
         'frame_set_id': frame_set_id,
         'video_id': video_id,
