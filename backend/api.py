@@ -30,7 +30,7 @@ except Exception as e:
     DB_AVAILABLE = False
 
 app = Flask("pose-annotator-backend")
-CORS(app)
+CORS(app, origins = ['https://pose-annotator.onrender.com'])
 
 # Initatlize database on startup
 if DB_AVAILABLE:
