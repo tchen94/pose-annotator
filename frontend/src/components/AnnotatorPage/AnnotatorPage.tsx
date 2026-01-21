@@ -2,6 +2,7 @@ import { useParams, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import AppContainer from "../../containers/AppContainer";
 import TokenProvider from "../../providers/TokenProvider";
+import Loader from "../Loader/Loader";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -20,8 +21,11 @@ const AnnotatorPage = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-xl">Validating access...</div>
+      <div className="flex flex-col items-center justify-center h-screen">
+        <Loader />
+        <p className="mt-6 text-gray-300 text-lg">
+          Loading<span className="animate-ellipsis">...</span>
+        </p>
       </div>
     );
   }
