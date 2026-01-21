@@ -305,8 +305,8 @@ def save_annotations():
         "video_id": str,
         "orig_width": int,
         "orig_height": int,
-        "rendered_width": int,
-        "rendered_height": int,
+        "render_width": int,
+        "render_height": int,
         "total_frames": int,
             "annotations": {
                 "123": { "nose": { "x": 100, "y": 200, "not_visible": false }, ... },
@@ -329,11 +329,11 @@ def save_annotations():
         # Extract dimension metadata
         orig_width = data.get('orig_width') or annotations.get('orig_width')
         orig_height = data.get('orig_height') or annotations.get('orig_height')
-        rendered_width = data.get('rendered_width') or annotations.get('rendered_width')
-        rendered_height = data.get('rendered_height') or annotations.get('rendered_height')
+        render_width = data.get('render_width') or annotations.get('render_width')
+        render_height = data.get('render_height') or annotations.get('render_height')
 
         # Count total frames (exluding the metadata fields)
-        metadata_keys = {'orig_width', 'orig_height', 'rendered_width', 'rendered_height'}
+        metadata_keys = {'orig_width', 'orig_height', 'render_width', 'render_height'}
         frame_annotations = {k: v for k, v in annotations.items() if k not in metadata_keys and isinstance(v, dict)}
         last_frame_annotated = data.get('last_frame_annotated', 0)
         total_frames = _load_meta(frame_set_id).get('num_frames', len(frame_annotations))
@@ -351,7 +351,7 @@ def save_annotations():
         # Save or update annotation session
         save_annotation_session(
             frame_set_id, video_id, orig_width, orig_height,
-            rendered_width, rendered_height, total_frames, last_frame_annotated, user_token=token
+            render_width, render_height, total_frames, last_frame_annotated, user_token=token
         )
 
         # Save each frame's annotations
@@ -416,8 +416,8 @@ def load_annotations(frame_set_id: str):
         annotations = {
             'orig_width': session.get('orig_width'),
             'orig_height': session.get('orig_height'),
-            'rendered_width': session.get('rendered_width'),
-            'rendered_height': session.get('rendered_height')
+            'render_width': session.get('render_width'),
+            'render_height': session.get('render_height')
         }
 
         for frame in frames:
