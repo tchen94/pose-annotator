@@ -30,7 +30,7 @@ except Exception as e:
     DB_AVAILABLE = False
 
 app = Flask("pose-annotator-backend")
-CORS(app, origins = ['https://pose-annotator.onrender.com'])
+CORS(app)
 
 # Initatlize database on startup
 if DB_AVAILABLE:
@@ -119,6 +119,9 @@ def upload_and_create_frame_set():
 
     # Persist frame set on disk
     frame_set_dir = os.path.join(FRAMESETS_DIR, frame_set_id)
+
+    # Create frame_sets directory
+    os.makedirs(frame_set_dir, exist_ok=True)
 
     meta = {
         'frame_set_id': frame_set_id,
