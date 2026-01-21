@@ -43,8 +43,8 @@ def init_db():
                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                            orig_width INTEGER,
                            orig_height INTEGER,
-                           rendered_width INTEGER,
-                           rendered_height INTEGER,
+                           render_width INTEGER,
+                           render_height INTEGER,
                            total_frames INTEGER DEFAULT 0,
                            annotated_frames INTEGER DEFAULT 0,
                            last_frame_annotated INTEGER DEFAULT 0,
@@ -126,16 +126,16 @@ def save_annotation_session(frame_set_id: str, video_id: str, orig_width: int,
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO annotation_sessions
-                (frame_set_id, video_id, orig_width, orig_height, rendered_width, 
-                       rendered_height, total_frames, last_frame_annotated, user_token)
+                (frame_set_id, video_id, orig_width, orig_height, render_width, 
+                       render_height, total_frames, last_frame_annotated, user_token)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (frame_set_id)
             DO UPDATE SET
                 updated_at = CURRENT_TIMESTAMP,
                 orig_width = EXCLUDED.orig_width,
                 orig_height = EXCLUDED.orig_height,
-                rendered_width = EXCLUDED.rendered_width,
-                rendered_height = EXCLUDED.rendered_height,
+                render_width = EXCLUDED.render_width,
+                render_height = EXCLUDED.render_height,
                 total_frames = EXCLUDED.total_frames,
                 last_frame_annotated = EXCLUDED.last_frame_annotated,
                 user_token = EXCLUDED.user_token
