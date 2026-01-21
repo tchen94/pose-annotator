@@ -12,7 +12,7 @@ import random
 import uuid
 import json
 
-# ============================= INITIALIZATION ==============================
+# ============================= INITIALIZATION ===============================
 # Load environment variables
 load_dotenv()
 
@@ -32,7 +32,7 @@ except Exception as e:
 app = Flask("pose-annotator-backend")
 CORS(app, origins = ['https://pose-annotator.onrender.com'])
 
-# Initatlize database on startup
+# Initialize database on startup
 if DB_AVAILABLE:
     init_db()
 
@@ -63,7 +63,7 @@ def _frame_to_base64(frame: np.ndarray) -> bytes:
 def _load_meta(frame_set_id: str) -> dict:
     path = os.path.join(FRAMESETS_DIR, frame_set_id, 'meta.json')
     if not os.path.exists(path):
-        raise FileNotFoundError('Frame set not found')
+        raise FileNotFoundError(f'{frame_set_id}/meta.json not found')
     with open(path, 'r', encoding = 'utf-8') as f:
         return json.load(f)
 
@@ -81,7 +81,7 @@ def upload_and_create_frame_set():
         return jsonify({'error': 'No file selected'}), 400
 
     if not _is_valid_video_file(file.filename):
-        return jsonify({'error': 'Invalid file type'}), 400
+        return jsonify({'error': 'Invalid video file type'}), 400
 
     # Read options from multipart form
     num_frames = request.form.get('num_frames', type = int)
@@ -121,7 +121,7 @@ def upload_and_create_frame_set():
     frame_set_dir = os.path.join(FRAMESETS_DIR, frame_set_id)
 
     # Create frame_sets directory
-    os.makedirs(frame_set_dir, exist_ok=True)
+    os.makedirs(frame_set_dir, exist_ok = True)
 
     meta = {
         'frame_set_id': frame_set_id,
@@ -196,7 +196,7 @@ def get_frame_set_info(frame_set_id: str):
             'frame_numbers': frame_numbers
         })
     except FileNotFoundError:
-        return jsonify({'error': 'Frame set not found'}), 404
+        return jsonify({'error': f'{frame_set_id}/meta.json not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -215,7 +215,7 @@ def get_frame_from_set(frame_set_id: str):
         try:
             meta = _load_meta(frame_set_id)
         except FileNotFoundError:
-            return jsonify({'error': 'Frame set not found'}), 404
+            return jsonify({'error': f'{frame_set_id}/meta.json not found'}), 404
 
         frame_numbers = meta.get('frame_numbers', [])
         if not frame_numbers:
@@ -291,9 +291,9 @@ def export_annotations_csv():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    
-# ================================ANNOTATION ENDPOINTS===============================
 
+
+# =========================== ANNOTATION ENDPOINTS ===========================
 @app.route('/annotations/save', methods = ['POST'])
 def save_annotations():
     """
@@ -332,9 +332,10 @@ def save_annotations():
         render_width = data.get('render_width') or annotations.get('render_width')
         render_height = data.get('render_height') or annotations.get('render_height')
 
-        # Count total frames (exluding the metadata fields)
+        # Count total frames (excluding the metadata fields)
         metadata_keys = {'orig_width', 'orig_height', 'render_width', 'render_height'}
-        frame_annotations = {k: v for k, v in annotations.items() if k not in metadata_keys and isinstance(v, dict)}
+        frame_annotations = {k: v for k, v in annotations.items() if
+                             k not in metadata_keys and isinstance(v, dict)}
         last_frame_annotated = data.get('last_frame_annotated', 0)
         total_frames = _load_meta(frame_set_id).get('num_frames', len(frame_annotations))
 
@@ -386,9 +387,7 @@ def save_annotations():
     
 @app.route('/annotations/load/<frame_set_id>', methods = ['GET'])
 def load_annotations(frame_set_id: str):
-    """
-    Load annotations for a given frame set.
-    """
+    """Load annotations for a given frame set."""
     if not DB_AVAILABLE:
         return jsonify({'error': 'Database not available'}), 503
     
@@ -441,9 +440,9 @@ def load_annotations(frame_set_id: str):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/annotations/sessions', methods=['GET'])
+@app.route('/annotations/sessions', methods = ['GET'])
 def get_annotation_sessions():
-    """ List all annotation sessions. """
+    """List all annotation sessions."""
     if not DB_AVAILABLE:
         return jsonify({'error': 'Database not available'}), 503
     
@@ -474,7 +473,7 @@ def get_annotation_sessions():
 
 @app.route('/annotations/session/<frame_set_id>', methods=['DELETE'])
 def delete_session(frame_set_id: str):
-    """ Delete an annotation session. """
+    """Delete an annotation session."""
     if not DB_AVAILABLE:
         return jsonify({'error': 'Database not available'}), 503
     
@@ -567,12 +566,10 @@ def auto_save_frame():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
-# ============================= USER MANAGEMENT =============================
-
+# ============================= USER MANAGEMENT ==============================
 @app.route('/admin/generate-token', methods = ['POST'])
 def generate_user_token():
-    """ Generate a unique token for a user. """
-    
+    """Generate a unique token for a user."""
     try:
         token = create_user_token()
         # Use frontend URL instead of backend URL
@@ -600,7 +597,6 @@ def check_token(token: str):
         return jsonify({'error': str(e)}), 500
     
 # ========================== HEALTH CHECK & DEBUGGING ========================
-
 @app.route('/health', methods = ['GET'])
 def health_check():
     """Health check endpoint."""
@@ -608,6 +604,8 @@ def health_check():
 
 @app.route('/debug/meta/<frame_set_id>')
 def debug_meta(frame_set_id):
+    """Check whether the meta.json file exists in the data/frame_sets
+    subdirectory."""
     path = os.path.join(FRAMESETS_DIR, frame_set_id, 'meta.json')
     exists = os.path.exists(path)
     return jsonify({'exists': exists, 'path': path})
