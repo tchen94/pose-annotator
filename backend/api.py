@@ -37,7 +37,8 @@ if DB_AVAILABLE:
     init_db()
 
 # ============================== CONFIGURATION ===============================
-DATA_DIR = 'data'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, 'data')
 VIDEOS_DIR = os.path.join(DATA_DIR, 'videos')
 FRAMESETS_DIR = os.path.join(DATA_DIR, 'frame_sets')
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
