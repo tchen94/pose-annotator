@@ -19,6 +19,8 @@ interface CanvasControl {
   active?: boolean;
 }
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 const Toolbar = () => {
   const {
     videoData,
@@ -46,7 +48,7 @@ const Toolbar = () => {
 
   const fetchFrame = async (frame_set_id: string, frameIdx: number) => {
     const response = await fetch(
-      `http://localhost:8000/frame-set/${frame_set_id}/frame?index=${frameIdx}`,
+      `${API_URL}/frame-set/${frame_set_id}/frame?index=${frameIdx}`,
     );
     if (!response.ok) throw new Error("Failed to fetch frame");
 
@@ -130,16 +132,13 @@ const Toolbar = () => {
     const json = JSON.stringify(annotations);
 
     try {
-      const response = await fetch(
-        "http://localhost:8000/annotations/export-csv",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: json,
+      const response = await fetch(`${API_URL}/annotations/export-csv`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: json,
+      });
 
       if (!response.ok) throw new Error("Failed to export annotations as CSV");
 
