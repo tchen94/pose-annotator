@@ -10,11 +10,15 @@ import numpy as np
 import base64
 import random
 import uuid
-import json
+import tempfile
 
 # ============================= INITIALIZATION ===============================
 # Load environment variables
 load_dotenv()
+
+# Initialize R2 Storage
+from storage.r2_storage import R2Storage
+r2_storage = R2Storage()
 
 # Import database functions
 try:
@@ -37,42 +41,90 @@ if DB_AVAILABLE:
     init_db()
 
 # ============================== CONFIGURATION ===============================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
-VIDEOS_DIR = os.path.join(DATA_DIR, 'videos')
-FRAMESETS_DIR = os.path.join(DATA_DIR, 'frame_sets')
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
-os.makedirs(VIDEOS_DIR, exist_ok = True)
-os.makedirs(FRAMESETS_DIR, exist_ok = True)
+
+# R2 Storage folders (prefixes)
+R2_FRAMESETS_PREFIX = 'frame_sets'
 
 # Store video processors and frame sets in memory (cache)
-video_processors = {}  # video_id -> VideoProcessor
-FRAME_SETS = {}        # frame_set_id -> { 'video_id': str, 'frame_numbers': list[int] }
-
+FRAME_SETS_META = {} # frame_set_id -> metadata
 
 # ================================= HELPERS ==================================
 def _is_valid_video_file(filename: str) -> bool:
     return ('.' in filename and filename.rsplit('.', 1)[1].lower() in
             ALLOWED_EXTENSIONS)
 
-def _frame_to_base64(frame: np.ndarray) -> bytes:
-    """Convert a frame to base64 encoded JPEG."""
-    _, buffer = cv2.imencode('.jpg', frame)
-    return base64.b64encode(buffer).decode('utf-8')
+# def _frame_to_base64(frame: np.ndarray) -> bytes:
+#     """Convert a frame to base64 encoded JPEG."""
+#     _, buffer = cv2.imencode('.jpg', frame)
+#     return base64.b64encode(buffer).decode('utf-8')
 
 def _load_meta(frame_set_id: str) -> dict:
-    path = os.path.join(FRAMESETS_DIR, frame_set_id, 'meta.json')
-    if not os.path.exists(path):
-        raise FileNotFoundError(f'{frame_set_id}/meta.json not found')
-    with open(path, 'r', encoding = 'utf-8') as f:
-        return json.load(f)
+    """Load metadata from cache or R2"""
+    # Check the cache first
+    if frame_set_id in FRAME_SETS_META:
+        return FRAME_SETS_META[frame_set_id]
+    
+    # Load from R2
+    object_key = f"{R2_FRAMESETS_PREFIX}/{frame_set_id}/meta.json"
+    meta = r2_storage.download_json(object_key)
 
+    if not meta:
+        raise FileNotFoundError(f"Metadata for frame set {frame_set_id} not found in R2")
+    
+    # Cache in memory
+    FRAME_SETS_META[frame_set_id] = meta
+    
+    return meta
+
+def _extract_and_upload_frames(processor: VideoProcessor, frame_set_id: str,
+                               frame_numbers: list[int], video_id: str):
+    """
+    Extract franmes from video and upload them as individual JPEGS to R2.
+    """
+    frame_paths = {}
+
+    for idx, frame_num in enumerate(frame_numbers):
+        # Get frame
+        frame = processor.get_frame(number = frame_num)
+        # Resize to max height = 720 px
+        frame_resized = processor.resize(frame, height = 720)
+        # Encode as JPEG
+        _, buffer = cv2.imencode('.jpg', frame_resized, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        #Upload to R2 - PATH: frame_sets/{frame_set_id}/frames/frame_{idx}.jpg
+        frame_key = f'{R2_FRAMESETS_PREFIX}/{frame_set_id}/frames/frame_{idx}.jpg'
+
+        try:
+            r2_storage.s3_client.put_object(
+                Bucket = r2_storage.bucket_name,
+                Key = frame_key,
+                Body = buffer.tobytes(),
+                ContentType = 'image/jpeg'
+            )
+
+            frame_paths[idx] = {
+                'frame_num': frame_num,
+                'frame_idx': idx,
+                'r2_key': frame_key,
+                'width': frame_resized.shape[1],
+                'height': frame_resized.shape[0]
+            }
+        
+        except Exception as e:
+            print(f"Error uploading frame {frame_num} to R2: {e}")
+            continue
+
+    return frame_paths
 
 # ================================= ROUTES ===================================
 @app.route('/frame-set', methods = ['POST'])
 def upload_and_create_frame_set():
     """Upload a video file and create a randomly selected set of frames given a
-    user-specified number of frames."""
+    user-specified number of frames and upload the frames to R2.
+
+    Structure: frame_sets/{frame_set_id}/frames/frame_{index}.jpg
+               frame_sets/{frame_set_id}/meta.json
+    """
     if 'video' not in request.files:
         return jsonify({'error': 'No video file provided'}), 400
 
@@ -90,98 +142,130 @@ def upload_and_create_frame_set():
 
     get_first_frame = request.form.get(
         'get_first_frame', 'true').lower() in ('1', 'true', 'yes')
+    
+    # OPTIONAL: keeping the original video in R2, we'll keep this false for now
+    keep_video = request.form.get('keep_video', 'false').lower() in ('1', 'true', 'yes')
 
     # Save video
     filename = secure_filename(file.filename)
     ext = os.path.splitext(filename)[1].lower()
     base = os.path.splitext(filename)[0]
     video_id = base
-    video_path = os.path.join(VIDEOS_DIR, f'{video_id}{ext}')
-    file.save(video_path)
-
-    # Create processor
-    processor = VideoProcessor(video_path)
-    video_processors[video_id] = processor
-
-    # Get frame count
-    total_frames = int(processor.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    if total_frames <= 0:
-        return jsonify(
-            {'error': 'Could not read frames from uploaded video'}), 400
-
-    num_frames = min(num_frames, total_frames)
-
-    # Generate random frame numbers
-    frame_numbers = sorted(random.sample(range(total_frames), num_frames))
 
     # Create frame_set_id
     frame_set_id = uuid.uuid4().hex
 
-    # Persist frame set on disk
-    frame_set_dir = os.path.join(FRAMESETS_DIR, frame_set_id)
+    # Save video to a temporary file
+    temp_file = tempfile.NamedTemporaryFile(delete = False, suffix = ext)
+    file.save(temp_file.name)
+    temp_file.close()
 
-    # Create frame_sets directory
-    os.makedirs(frame_set_dir, exist_ok = True)
+    try:
+        processor = VideoProcessor(temp_file.name)
+        
+        # Get frame count
+        total_frames = int(processor.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if total_frames <= 0:
+            return jsonify(
+                {'error': 'Could not read frames from uploaded video'}), 400
 
-    meta = {
-        'frame_set_id': frame_set_id,
-        'video_id': video_id,
-        'video_path': video_path,
-        'fps': processor.fps,
-        'width': processor.width,
-        'height': processor.height,
-        'total_frames': total_frames,
-        'num_frames': num_frames,
-        'frame_numbers': frame_numbers
-    }
+        num_frames = min(num_frames, total_frames)
 
-    with open(os.path.join(frame_set_dir, 'meta.json'), 'w',
-              encoding = 'utf-8') as f:
-        json.dump(meta, f, indent = 2)
+        # Generate random frame numbers
+        frame_numbers = sorted(random.sample(range(total_frames), num_frames))
 
-    # Cache in memory
-    FRAME_SETS[frame_set_id] = {
-        'video_id': video_id,
-        'frame_numbers': frame_numbers
-    }
+        # Extract and upload frames to R2
+        frame_paths = _extract_and_upload_frames(
+            processor, frame_set_id, frame_numbers, video_id
+        )
 
-    resp = {
-        'video_id': video_id,
-        'frame_set_id': frame_set_id,
-        'fps': processor.fps,
-        'orig_width': processor.width,
-        'orig_height': processor.height,
-        'total_frames': total_frames,
-        'count': len(frame_numbers),
-        'frame_numbers': frame_numbers
-    }
+        if not frame_paths:
+            return jsonify({'error': 'Failed to extract and upload frames'}), 500
+        
+        # Get render dimensions from the first frame
+        first_frame_info = frame_paths[0]
+        render_width = first_frame_info.get('width', processor.width)
+        render_height = first_frame_info.get('height', processor.height)
 
-    if get_first_frame and len(frame_numbers) > 0:
-        first_index = 0
-        first_frame_num = frame_numbers[first_index]
-
-        frame = processor.get_frame(number = first_frame_num)
-
-        # Resize to max height = 720 px
-        frame = processor.resize(frame, height = 720)
-
-        # Add render dimensions to response
-        resp['render_width'] = frame.shape[1]
-        resp['render_height'] = frame.shape[0]
-
-        resp['first_frame'] = {
-            'frame_idx': first_index,
-            'frame_num': first_frame_num,
-            'frame_img': _frame_to_base64(frame),
-            'render_width': frame.shape[1],
-            'render_height': frame.shape[0]
+        # OPTIONAL: Upload original video to R2
+        video_path_r2 = None
+        if keep_video:
+            video_path_r2 = f'{R2_FRAMESETS_PREFIX}/{frame_set_id}/video{ext}'
+            if not r2_storage.upload_file(temp_file.name, video_path_r2):
+                print("Warning: Failed to upload original video to R2")
+                video_path_r2 = None
+                
+        # Create metadata
+        meta = {
+            'frame_set_id': frame_set_id,
+            'video_id': video_id,
+            'fps': processor.fps,
+            'width': processor.width,
+            'height': processor.height,
+            'total_frames': total_frames,
+            'num_frames': num_frames,
+            'frame_numbers': frame_numbers,
+            'frame_paths': frame_paths
         }
 
-    return jsonify(resp)
+        # Save the metadata to R2
+        meta_key = f'{R2_FRAMESETS_PREFIX}/{frame_set_id}/meta.json'
+        if not r2_storage.upload_json(meta, meta_key):
+            return jsonify({'error': 'Failed to upload metadata to R2'}), 500
+        
+        # Cache metadata in memory
+        FRAME_SETS_META[frame_set_id] = meta
+
+        resp = {
+            'video_id': video_id,
+            'frame_set_id': frame_set_id,
+            'fps': processor.fps,
+            'orig_width': processor.width,
+            'orig_height': processor.height,
+            'total_frames': total_frames,
+            'count': len(frame_numbers),
+            'frame_numbers': frame_numbers
+        }
+
+        if get_first_frame and 0 in frame_paths:
+            # Download first frame from R2
+            first_frame_key = frame_paths[0]['r2_key']
+
+            try:
+                response = r2_storage.s3_client.get_object(
+                    Bucket = r2_storage.bucket_name,
+                    Key = first_frame_key
+                )
+                frame_bytes = response['Body'].read()
+                frame_b64 = base64.b64encode(frame_bytes).decode('utf-8')
+
+                resp['first_frame'] = {
+                    'frame_idx': 0,
+                    'frame_num': frame_numbers[0],
+                    'frame_img': frame_b64,
+                    'render_width': render_width,
+                    'render_height': render_height
+                }
+            except Exception as e:
+                print(f"Warning: Failed to download first frame from R2: {e}")
+        
+        return jsonify(resp)
+    
+    except Exception as e:
+        print(f"Error processing video: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+    finally:
+        # Clean up temp file!
+        if os.path.exists(temp_file.name):
+            try:
+                os.unlink(temp_file.name)
+            except Exception as e:
+                print(f"Warning: Failed to delete temp file {temp_file.name}: {e}")
 
 @app.route('/frame-set/<frame_set_id>/info', methods = ['GET'])
 def get_frame_set_info(frame_set_id: str):
-    """Load persisted frame set metadata."""
+    """Load frame set metadata from R2."""
     try:
         metadata = _load_meta(frame_set_id)
         frame_numbers = metadata.get('frame_numbers', [])
@@ -209,57 +293,49 @@ def get_frame_from_set(frame_set_id: str):
     --------
     GET /frame-set/<id>/frame?index=0
     """
-    frame_set = FRAME_SETS.get(frame_set_id)
 
-    if not frame_set:
-        try:
-            meta = _load_meta(frame_set_id)
-        except FileNotFoundError:
-            return jsonify({'error': f'{frame_set_id}/meta.json not found'}), 404
-
-        frame_numbers = meta.get('frame_numbers', [])
-        if not frame_numbers:
-            return jsonify({'error': 'No frames available in this frame set'}), 400
-
-        frame_set = {
-            'video_id': meta['video_id'],
-            'frame_numbers': frame_numbers
-        }
-        FRAME_SETS[frame_set_id] = frame_set
-
-        # Ensure processor exists
-        if meta['video_id'] not in video_processors:
-            if not os.path.exists(meta['video_path']):
-                return jsonify({'error': 'Video file not found on server'}), 404
-            video_processors[meta['video_id']] = VideoProcessor(meta['video_path'])
-
-    video_id = frame_set['video_id']
-    processor = video_processors.get(video_id)
-    if not processor:
-        return jsonify({'error': 'Video not found'}), 404
+    try:
+        meta = _load_meta(frame_set_id)
+    except FileNotFoundError:
+        return jsonify({'error': f'{frame_set_id}/meta.json not found'}), 404
 
     frame_idx = request.args.get('index', type = int)
     if frame_idx is None:
         return jsonify({'error': 'Missing index parameter'}), 400
 
-    frame_numbers = frame_set['frame_numbers']
+    frame_numbers = meta.get('frame_numbers', [])
     if frame_idx < 0 or frame_idx >= len(frame_numbers):
         return jsonify({'error': 'index out of range'}), 400
+    
+    frame_paths = meta.get('frame_paths', {})
 
-    frame_num = frame_numbers[frame_idx]
-    frame = processor.get_frame(number = frame_num)
+    # Ensure to handle both strings or int for frame_paths keys
+    frame_info = frame_paths.get(frame_idx) or frame_paths.get(str(frame_idx))
 
-    # Resize to max height = 720 px
-    frame = processor.resize(frame, height = 720)
+    if not frame_info:
+        return jsonify({'error': f'Frame index {frame_idx} not found in frame paths'}), 404
+    
+    # Fetch frame from R2
+    frame_key = frame_info['r2_key']
+
+    try:
+        response = r2_storage.s3_client.get_object(
+            Bucket = r2_storage.bucket_name,
+            Key = frame_key
+        )
+        frame_bytes = response['Body'].read()
+        frame_b64 = base64.b64encode(frame_bytes).decode('utf-8')
+    except Exception as e:
+        return jsonify({'error': f'Failed to download frame from R2: {e}'}), 500
 
     return jsonify({
         'frame_set_id': frame_set_id,
         'frame_count': len(frame_numbers),
         'frame_idx': frame_idx,
-        'frame_num': frame_num,
-        'frame_img': _frame_to_base64(frame),
-        'render_width': frame.shape[1],
-        'render_height': frame.shape[0]
+        'frame_num': frame_info['frame_num'],
+        'frame_img': frame_b64,
+        'render_width': frame_info['width'],
+        'render_height': frame_info['height']
     })
 
 
@@ -473,7 +549,7 @@ def get_annotation_sessions():
 
 @app.route('/annotations/session/<frame_set_id>', methods=['DELETE'])
 def delete_session(frame_set_id: str):
-    """Delete an annotation session."""
+    """Delete an annotation session and associated R2 files."""
     if not DB_AVAILABLE:
         return jsonify({'error': 'Database not available'}), 503
     
@@ -494,6 +570,14 @@ def delete_session(frame_set_id: str):
 
         if not deleted:
             return jsonify({'error': 'Session not found'}), 404
+        
+        # Delete entire frame_set folder of that unique frame_set_id from R2
+        frame_set_prefix = f"{R2_FRAMESETS_PREFIX}/{frame_set_id}/"
+        r2_storage.delete_folder(frame_set_prefix)
+
+        # Remove it from the cache (if Render Free Tier hasn't purged it already)
+        if frame_set_id in FRAME_SETS_META:
+            del FRAME_SETS_META[frame_set_id]
         
         return jsonify({
             'success': True,

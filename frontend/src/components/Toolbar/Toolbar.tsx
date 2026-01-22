@@ -58,17 +58,22 @@ const Toolbar = () => {
     setCurrentFrameIdx(data.frame_idx);
 
     // Initalize frame annotations if it doesn't exist
-    if (!annotations[data.frame_num]) {
+    setAnnotations((prevAnnotations) => {
+      // If annotations already exist for this frame, don't overwrite
+      if (prevAnnotations[data.frame_num]) {
+        return prevAnnotations;
+      }
+
       const frameAnnotations: BodyPartAnnotations = {};
       BODY_PART.forEach((part) => {
         frameAnnotations[part] = { x: null, y: null, not_visible: false };
       });
 
-      setAnnotations({
-        ...annotations,
+      return {
+        ...prevAnnotations,
         [data.frame_num]: frameAnnotations,
-      });
-    }
+      };
+    });
   };
 
   const handleStepBack = () => {

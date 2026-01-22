@@ -78,7 +78,6 @@ const VideoPlayer = () => {
     });
 
     setAnnotations({
-      ...annotations,
       [data.first_frame.frame_num]: firstFrameAnnotations,
       orig_width: data.orig_width,
       orig_height: data.orig_height,
