@@ -1,4 +1,10 @@
-import { createContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 
 interface FirstFrame {
   frame_idx: number;
@@ -51,7 +57,7 @@ interface VideoContextType {
   currentFrameIdx: number;
   setCurrentFrameIdx: (idx: number) => void;
   annotations: Annotations;
-  setAnnotations: (annotations: Annotations) => void;
+  setAnnotations: Dispatch<SetStateAction<Annotations>>;
   selectedBodyPart: string | null;
   setSelectedBodyPart: (bodyPart: string | null) => void;
   annotationMode: boolean;
