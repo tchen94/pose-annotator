@@ -66,6 +66,7 @@ const VideoPlayer = () => {
     const data = await response.json();
     setVideoData(data);
     setFrames(data.frame_numbers);
+    setNumOfFrames(data.frame_numbers.length);
 
     setCurrentFrame(data.first_frame.frame_img);
     setCurrentFrameIdx(data.first_frame.frame_idx);
@@ -138,6 +139,7 @@ const VideoPlayer = () => {
       });
 
       setFrames(frameSetData.frame_numbers);
+      setNumOfFrames(frameSetData.frame_numbers.length);
       setCurrentFrame(frameData.frame_img);
       setCurrentFrameIdx(frameData.frame_idx);
       setCurrentFrameNumber(frameData.frame_num);
