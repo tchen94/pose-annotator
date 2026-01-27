@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 import os
 import utils
 import cv2
-import numpy as np
 import base64
 import random
 import uuid
@@ -683,14 +682,6 @@ def check_token(token: str):
 def health_check():
     """Health check endpoint."""
     return jsonify({'status': 'ok'})
-
-@app.route('/debug/meta/<frame_set_id>')
-def debug_meta(frame_set_id):
-    """Check whether the meta.json file exists in the data/frame_sets
-    subdirectory."""
-    path = os.path.join(FRAMESETS_DIR, frame_set_id, 'meta.json')
-    exists = os.path.exists(path)
-    return jsonify({'exists': exists, 'path': path})
 
 
 if __name__ == '__main__':
