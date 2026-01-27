@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 from os import path
 import cv2
 import numpy as np
@@ -151,7 +151,7 @@ class VideoProcessor:
 
         Parameters
         ----------
-        frames : np.ndarray
+        frames : np.ndarray or list[np.ndarray]
             The input frame(s) to crop.
         width_perc : float, optional
             The width as a percentage (0 to 1) of the original frame width.
@@ -236,3 +236,40 @@ class VideoProcessor:
             cropped_frames.append(cropped)
 
         return cropped_frames if is_list else cropped_frames[0]
+
+    def rotate(
+        self,
+        frames: Union[np.ndarray, list[np.ndarray]],
+        degrees: Literal[90, 180] = 180
+    ) -> Union[np.ndarray, list[np.ndarray]]:
+        """
+        Rotate a single video frame or multiple video frames by 90° or 180°.
+
+        Parameters
+        ----------
+        frames : np.ndarray or list[np.ndarray]
+            The input frame(s) to rotate.
+        degrees : int, optional
+            The number of degrees to rotate the frame. Must be either 90 or
+            180; by default, 180.
+
+        Returns
+        -------
+        rotated : np.ndarray or list[np.ndarray]
+            The rotated frame(s).
+        """
+
+        # Set the rotation code
+        if degrees == 90:
+            rotation_code = cv2.ROTATE_90_CLOCKWISE
+        elif degrees == 180:
+            rotation_code = cv2.ROTATE_180
+        else:
+            raise ValueError(f'`degrees` must be 90 or 180.')
+
+        # Rotate frame(s)
+        if isinstance(frames, np.ndarray):
+            rotated = cv2.rotate(frames, rotation_code)
+        else:
+            rotated = [cv2.rotate(frame, rotation_code) for frame in frames]
+        return rotated
