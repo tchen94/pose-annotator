@@ -221,6 +221,8 @@ def upload_and_create_frame_set():
             'fps': processor.fps,
             'orig_width': processor.width,
             'orig_height': processor.height,
+            'render_width': render_width,
+            'render_height': render_height,
             'total_frames': total_frames,
             'count': len(frame_numbers),
             'frame_numbers': frame_numbers
